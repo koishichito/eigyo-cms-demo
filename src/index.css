@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root {
+  --jnavi-navy: #0b1736;
+  --jnavi-bg: #f8fafc;
+  --jnavi-card: #ffffff;
+  --jnavi-border: #e2e8f0;
+  --jnavi-success: #16a34a;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--jnavi-bg);
+}
+
+/* クリック時の青いハイライトを抑制（特にモバイル） */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
