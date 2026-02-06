@@ -44,7 +44,7 @@ export default function DashboardPage() {
 
   return (
     <div className="grid gap-6">
-      <Card title={headline} subtitle="3層フラット構造 / 固定報酬（代理店15%・コネクター5%）">
+      <Card title={headline} subtitle="3層フラット構造 / 報酬総額15%（代理店10%・コネクター5%）">
         <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="text-xs text-slate-500">未確定報酬</div>
@@ -71,7 +71,7 @@ export default function DashboardPage() {
                 <div className="text-sm font-semibold text-slate-900">チーム実績</div>
                 <div className="text-xs text-slate-600">配下コネクター数: {teamCount}</div>
               </div>
-              <Badge tone="slate">代理店報酬 15%</Badge>
+              <Badge tone="slate">代理店報酬 10%</Badge>
             </div>
             <div className="mt-3 grid gap-1 text-sm text-slate-700">
               <div className="flex items-center justify-between">
@@ -143,7 +143,7 @@ export default function DashboardPage() {
               <ul className="list-disc pl-5">
                 <li>コネクターはリンク発行→リード獲得（集客）</li>
                 <li>代理店はコネクターの管理・教育・クロージング支援</li>
-                <li>報酬は固定率で透明（15%/5%）</li>
+                <li>報酬は固定率で透明（報酬総額15%中、代理店10%/コネクター5%）</li>
               </ul>
             </div>
           </div>

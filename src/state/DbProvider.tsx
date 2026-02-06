@@ -708,7 +708,7 @@ export function DbProvider(props: { children: React.ReactNode }) {
                 recipientType: 'ユーザー報酬',
                 userId: connector.id,
                 userRole: 'コネクター',
-                label: 'コネクター報酬（5%）',
+                label: `コネクター報酬（${Math.round(ratesUsed.connectorRate * 1000) / 10}%）`,
                 rate: ratesUsed.connectorRate,
                 baseAmountJPY: amounts.baseAmountJPY,
                 amountJPY: amounts.connectorRewardJPY,

@@ -50,7 +50,7 @@ function AdminPartnersInner() {
 
                   <div className="text-right text-sm">
                     <div className="text-slate-700">チーム売上: {formatJPY(teamSales)}</div>
-                    <div className="text-slate-700">代理店報酬(15%): {formatJPY(agencyRewards)}</div>
+                    <div className="text-slate-700">代理店報酬(10%): {formatJPY(agencyRewards)}</div>
                   </div>
                 </div>
 
