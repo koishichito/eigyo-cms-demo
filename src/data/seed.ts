@@ -1,11 +1,10 @@
-import bcrypt from 'bcryptjs'
 import type { Db } from '../state/types'
 
-// NOTE: この seed は「3層フラット構造（Jnavi-代理店-コネクター）」のデモ用データです。
-// - 代理店配下にコネクターが並列で紐づきます（コネクター配下にコネクターは存在しません）
-// - 「紹介者（introducedById）」は参考データとしてのみ保持します（組織/報酬計算には不使用）
+// NOTE: この seed はローカル開発のフォールバック用です。
+// 本番環境では Supabase のデータベースからデータを取得します。
+// パスワードハッシュは Supabase Auth が管理するため、ここでは空文字列を使用します。
 
-const hash = (plain: string) => bcrypt.hashSync(plain, 10)
+const hash = (_plain: string) => ''
 
 export const seedDb: Db = {
   schemaVersion: 4,

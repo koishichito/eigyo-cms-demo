@@ -4,6 +4,7 @@ import { findUser, getCurrentUser } from '../../state/selectors'
 
 export default function AdminLogsPage() {
   const { db } = useDb()
+  if (!db) return null
   const me = getCurrentUser(db)
 
   if (me.role !== 'J-Navi管理者') {

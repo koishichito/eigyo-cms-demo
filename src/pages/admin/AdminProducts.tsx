@@ -33,8 +33,9 @@ function emptyDraft(defaultSupplierId: string): Product {
 
 function AdminProductsInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const toast = useToast()
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   if (me.role !== 'J-Navi管理者') {
     return (
@@ -208,14 +209,14 @@ function AdminProductsInner() {
               </Button>
               <Button
                 variant="primary"
-                onClick={() => {
+                onClick={async () => {
                   if (!editing.name.trim()) {
                     toast.show('商品名を入力してください', 'error')
                     return
                   }
 
                   if (isCreate) {
-                    const res = actions.createProduct({
+                    const res = await actions.createProduct({
                       supplierId: editing.supplierId,
                       name: editing.name,
                       category: editing.category,
@@ -236,7 +237,7 @@ function AdminProductsInner() {
                     return
                   }
 
-                  const res = actions.updateProduct({ ...editing })
+                  const res = await actions.updateProduct({ ...editing })
                   if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                   else {
                     toast.show('更新しました', 'success')

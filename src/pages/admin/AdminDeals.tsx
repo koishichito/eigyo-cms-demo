@@ -10,8 +10,9 @@ import { formatDateYMD, formatJPY } from '../../utils/format'
 
 function AdminDealsInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const toast = useToast()
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   if (me.role !== 'J-Navi管理者') {
     return (
@@ -141,8 +142,8 @@ function AdminDealsInner() {
                         <Button
                           size="sm"
                           variant="primary"
-                          onClick={() => {
-                            const res = actions.adminConfirmRewardsForTransaction(t.id)
+                          onClick={async () => {
+                            const res = await actions.adminConfirmRewardsForTransaction(t.id)
                             if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                             else toast.show('報酬を確定にしました', 'success')
                           }}

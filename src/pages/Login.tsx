@@ -13,7 +13,7 @@ function LoginInner() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  const already = getSessionUser(db)
+  const already = db ? getSessionUser(db) : null
 
   return (
     <div className="mx-auto max-w-md">
@@ -54,8 +54,8 @@ function LoginInner() {
 
           <Button
             variant="primary"
-            onClick={() => {
-              const res = actions.login(email, password)
+            onClick={async () => {
+              const res = await actions.login(email, password)
               if (!res.ok) {
                 toast.show(res.message ?? 'ログインに失敗しました', 'error')
                 return

@@ -7,8 +7,9 @@ import { getCurrentUser } from '../../state/selectors'
 
 function AdminCommissionInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const toast = useToast()
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   if (me.role !== 'J-Navi管理者') {
     return (
@@ -64,11 +65,11 @@ function AdminCommissionInner() {
 
             <Button
               variant="primary"
-              onClick={() => {
+              onClick={async () => {
                 const ar = Number(agencyRatePct) / 100
                 const cr = Number(connectorRatePct) / 100
 
-                const res = actions.adminSetCommissionRates(ar, cr)
+                const res = await actions.adminSetCommissionRates(ar, cr)
                 if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                 else toast.show('報酬率を更新しました', 'success')
               }}

@@ -17,6 +17,7 @@ function prettyProductType(productType: string) {
 
 export default function MarketplacePage() {
   const { db } = useDb()
+  if (!db) return null
   const me = getCurrentUser(db)
 
   const products = useMemo(() => db.products.filter((p) => p.isPublic), [db.products])
@@ -156,6 +157,7 @@ export default function MarketplacePage() {
 function CommissionPreview(props: { baseDefault: number; role: string }) {
   const { db } = useDb()
   const [base, setBase] = useState<number>(props.baseDefault)
+  if (!db) return null
 
   const amounts = useMemo(() => {
     return calculateModelAAmounts({

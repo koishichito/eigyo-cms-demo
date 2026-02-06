@@ -30,8 +30,8 @@ function LpInner() {
     }
   }, [location.search])
 
-  const connector = findUser(db, connectorId)
-  const product = findProduct(db, productId)
+  const connector = db ? findUser(db, connectorId) : undefined
+  const product = db ? findProduct(db, productId) : undefined
 
   const [company, setCompany] = useState('')
   const [name, setName] = useState('')
@@ -185,9 +185,9 @@ function LpInner() {
                 <Button
                   variant="primary"
                   disabled={!canSubmit}
-                  onClick={() => {
+                  onClick={async () => {
                     if (!connector || connector.role !== 'コネクター' || !product) return
-                    const res = actions.createDealFromReferral({
+                    const res = await actions.createDealFromReferral({
                       connectorId: connector.id,
                       productId: product.id,
                       customerCompanyName: company,

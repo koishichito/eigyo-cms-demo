@@ -5,6 +5,8 @@ import { useDb } from '../state/DbProvider'
 export default function OutboxPage() {
   const { db, actions } = useDb()
 
+  if (!db) return null
+
   return (
     <div className="mx-auto max-w-3xl">
       <Card
@@ -19,7 +21,7 @@ export default function OutboxPage() {
           </div>
           <button
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
-            onClick={() => actions.resetAll()}
+            onClick={async () => await actions.resetAll()}
           >
             デモデータ初期化
           </button>

@@ -7,8 +7,9 @@ import { formatJPY } from '../../utils/format'
 
 function AdminPayoutsInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const toast = useToast()
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   if (me.role !== 'J-Navi管理者') {
     return (
@@ -67,8 +68,8 @@ function AdminPayoutsInner() {
                       <Button
                         size="sm"
                         variant="primary"
-                        onClick={() => {
-                          const res = actions.adminMarkPayoutPaid(p.id)
+                        onClick={async () => {
+                          const res = await actions.adminMarkPayoutPaid(p.id)
                           if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                           else toast.show('支払済みにしました', 'success')
                         }}

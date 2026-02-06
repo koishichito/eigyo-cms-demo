@@ -9,17 +9,19 @@ import type { BankAccount } from '../state/types'
 
 function SettingsInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
+  const me = db ? getCurrentUser(db) : null
   const toast = useToast()
 
-  const [name, setName] = useState(me.name)
-  const [email, setEmail] = useState(me.email)
+  const [name, setName] = useState(me?.name ?? '')
+  const [email, setEmail] = useState(me?.email ?? '')
 
-  const [bank, setBank] = useState<BankAccount | undefined>(me.bankAccount)
+  const [bank, setBank] = useState<BankAccount | undefined>(me?.bankAccount)
 
   const [curPw, setCurPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [newPw2, setNewPw2] = useState('')
+
+  if (!db || !me) return null
 
   const canBank = me.role === '代理店' || me.role === 'コネクター'
 
@@ -108,8 +110,8 @@ function SettingsInner() {
               <div className="mt-2">
                 <Button
                   variant="primary"
-                  onClick={() => {
-                    const res = actions.updateMyProfile({ name, email, bankAccount: bank })
+                  onClick={async () => {
+                    const res = await actions.updateMyProfile({ name, email, bankAccount: bank })
                     if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                     else toast.show('更新しました', 'success')
                   }}
@@ -153,12 +155,12 @@ function SettingsInner() {
 
               <Button
                 variant="primary"
-                onClick={() => {
+                onClick={async () => {
                   if (newPw !== newPw2) {
                     toast.show('新しいパスワードが一致しません', 'error')
                     return
                   }
-                  const res = actions.changePassword(curPw, newPw)
+                  const res = await actions.changePassword(curPw, newPw)
                   if (!res.ok) toast.show(res.message ?? '変更できませんでした', 'error')
                   else {
                     toast.show('変更しました', 'success')
@@ -183,8 +185,8 @@ function SettingsInner() {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
-              onClick={() => {
-                actions.resetAll()
+              onClick={async () => {
+                await actions.resetAll()
                 toast.show('デモデータを初期化しました', 'success')
               }}
             >

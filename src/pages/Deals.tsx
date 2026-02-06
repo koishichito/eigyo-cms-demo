@@ -28,8 +28,9 @@ function revenueLabel(productType: Product['type']): string {
 
 function DealsInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const toast = useToast()
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   const myDeals = useMemo(() => {
     if (me.role === 'コネクター') {
@@ -97,8 +98,8 @@ function DealsInner() {
                 key={d.id}
                 deal={d}
                 showConnector={me.role === '代理店'}
-                onUpdateStatus={(next) => {
-                  const res = actions.updateDealStatus(d.id, next)
+                onUpdateStatus={async (next) => {
+                  const res = await actions.updateDealStatus(d.id, next)
                   if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                 }}
                 onFinalize={() => setFinalizeDealId(d.id)}
@@ -178,8 +179,8 @@ function DealsInner() {
           <Button
             variant="primary"
             disabled={!createProductId || !createCompany || !createName || !createEmail}
-            onClick={() => {
-              const res = actions.createDealManual({
+            onClick={async () => {
+              const res = await actions.createDealManual({
                 productId: createProductId,
                 customerCompanyName: createCompany,
                 customerName: createName,
@@ -231,6 +232,7 @@ function DealRow(props: {
   onFinalize?: () => void
 }) {
   const { db } = useDb()
+  if (!db) return null
   const product = findProduct(db, props.deal.productId)
   const connector = findUser(db, props.deal.connectorId)
 
@@ -304,6 +306,7 @@ function DealRow(props: {
 function FinalizeForm(props: { deal: Deal; product: Product; onClose: () => void }) {
   const { db, actions } = useDb()
   const toast = useToast()
+  if (!db) return null
 
   const [sale, setSale] = useState<number>(props.product.listPriceJPY)
   const [date, setDate] = useState<string>(() => {
@@ -372,8 +375,8 @@ function FinalizeForm(props: { deal: Deal; product: Product; onClose: () => void
 
         <Button
           variant="primary"
-          onClick={() => {
-            const res = actions.finalizeDeal({ dealId: props.deal.id, finalSaleAmountJPY: sale, closingDate: date })
+          onClick={async () => {
+            const res = await actions.finalizeDeal({ dealId: props.deal.id, finalSaleAmountJPY: sale, closingDate: date })
             if (!res.ok) {
               toast.show(res.message ?? '確定できませんでした', 'error')
               return

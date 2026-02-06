@@ -9,6 +9,7 @@ import { formatJPY } from '../utils/format'
 
 export default function NetworkPage() {
   const { db } = useDb()
+  if (!db) return null
   const me = getCurrentUser(db)
 
   const agency = useMemo(() => {
@@ -97,6 +98,7 @@ export default function NetworkPage() {
 
 function AgencyBox(props: { agencyId: string; title: string }) {
   const { db } = useDb()
+  if (!db) return null
   const agency = db.users.find((u) => u.id === props.agencyId)
   const connectors = useMemo(() => connectorsForAgency(db, props.agencyId), [db, props.agencyId])
 

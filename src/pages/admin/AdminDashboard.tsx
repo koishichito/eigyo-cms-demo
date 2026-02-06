@@ -20,6 +20,7 @@ function groupLabel(type: string): string {
 
 export default function AdminDashboardPage() {
   const { db } = useDb()
+  if (!db) return null
   const me = getCurrentUser(db)
 
   if (me.role !== 'J-Navi管理者') {

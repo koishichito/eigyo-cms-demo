@@ -10,8 +10,9 @@ import type { UserRewardAllocation } from '../state/types'
 
 function RewardsInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const toast = useToast()
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   const rows = useMemo(() => {
     const out: Array<{
@@ -79,8 +80,8 @@ function RewardsInner() {
           <Button
             variant="primary"
             disabled={sums.確定 < db.settings.minPayoutJPY}
-            onClick={() => {
-              const res = actions.requestPayoutAll()
+            onClick={async () => {
+              const res = await actions.requestPayoutAll()
               if (!res.ok) {
                 toast.show(res.message ?? '申請できませんでした', 'error')
                 return

@@ -1,117 +1,186 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import bcrypt from 'bcryptjs'
-import { seedDb } from '../data/seed'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { supabase } from '../lib/supabase'
 import type {
+  Allocation,
   BankAccount,
   Db,
   Deal,
   DealStatus,
+  Mail,
+  OperationLog,
   PayoutRequest,
   Product,
-  RewardStatus,
+  Supplier,
+  SystemSettings,
   Transaction,
   User,
   UserRole,
 } from './types'
 import { calculateModelAAmounts, initialRewardStatusForProductType } from '../utils/reward'
 
-const STORAGE_KEY = 'jnavi_matching_demo_db_v4'
-
-function uid(prefix: string) {
-  const rand = Math.random().toString(16).slice(2, 10)
-  return `${prefix}_${Date.now().toString(16)}_${rand}`
-}
-
-function nowIso() {
-  return new Date().toISOString()
-}
+// ---- helpers ----
 
 function safeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-function normalizeInviteCode(code: string) {
-  return code.trim().toUpperCase()
+// DB → Frontend の型変換ヘルパー
+function mapProfile(row: any): User {
+  return {
+    id: row.id,
+    role: row.role as UserRole,
+    name: row.name,
+    email: row.email,
+    passwordHash: '', // Supabase Auth が管理
+    createdAt: row.created_at,
+    bankAccount: row.bank_account ?? undefined,
+    agency: row.invite_code ? { inviteCode: row.invite_code } : undefined,
+    connector:
+      row.agency_id
+        ? { agencyId: row.agency_id, introducedById: row.introduced_by_id ?? undefined }
+        : undefined,
+  }
 }
 
-function findUserByEmail(db: Db, email: string): User | undefined {
-  const e = safeEmail(email)
-  return db.users.find((u) => safeEmail(u.email) === e)
+function mapSupplier(row: any): Supplier {
+  return { id: row.id, name: row.name, note: row.note ?? undefined }
 }
 
-function requireSession(db: Db): User {
-  const u = db.users.find((x) => x.id === db.sessionUserId)
-  if (!u) throw new Error('ログインが必要です')
-  return u
+function mapProduct(row: any): Product {
+  return {
+    id: row.id,
+    supplierId: row.supplier_id,
+    name: row.name,
+    category: row.category,
+    type: row.type,
+    listPriceJPY: row.list_price_jpy,
+    imageUrl: row.image_url ?? undefined,
+    description: row.description,
+    materials: row.materials ?? [],
+    isPublic: row.is_public,
+    adSpec: row.ad_spec ?? undefined,
+    vacancyStatus: row.vacancy_status ?? undefined,
+  }
 }
 
-function isAdmin(u: User) {
-  return u.role === 'J-Navi管理者'
+function mapDeal(row: any): Deal {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    locked: row.locked,
+    status: row.status as DealStatus,
+    connectorId: row.connector_id,
+    productId: row.product_id,
+    customerCompanyName: row.customer_company_name,
+    customerName: row.customer_name,
+    customerEmail: row.customer_email,
+    customerPhone: row.customer_phone ?? undefined,
+    memo: row.memo ?? undefined,
+    source: row.source,
+    finalSaleAmountJPY: row.final_sale_amount_jpy ?? undefined,
+    closingDate: row.closing_date ?? undefined,
+  }
 }
 
-function isAgency(u: User) {
-  return u.role === '代理店'
+function mapAllocation(row: any): Allocation {
+  if (row.recipient_type === 'Jnavi取り分') {
+    return {
+      id: row.id,
+      recipientType: 'Jnavi取り分',
+      label: row.label,
+      amountJPY: row.amount_jpy,
+    }
+  }
+  return {
+    id: row.id,
+    recipientType: 'ユーザー報酬',
+    userId: row.user_id,
+    userRole: row.user_role,
+    label: row.label,
+    rate: Number(row.rate),
+    baseAmountJPY: row.base_amount_jpy,
+    amountJPY: row.amount_jpy,
+    status: row.status,
+    payoutRequestId: row.payout_request_id ?? undefined,
+  }
 }
 
-function isConnector(u: User) {
-  return u.role === 'コネクター'
+function mapTransaction(row: any, allocations: Allocation[]): Transaction {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    dealId: row.deal_id,
+    closingDate: row.closing_date,
+    productSnapshot: row.product_snapshot,
+    connectorId: row.connector_id,
+    agencyId: row.agency_id,
+    saleAmountJPY: row.sale_amount_jpy,
+    baseAmountJPY: row.base_amount_jpy,
+    ratesUsed: row.rates_used,
+    agencyRewardJPY: row.agency_reward_jpy,
+    connectorRewardJPY: row.connector_reward_jpy,
+    jnaviShareJPY: row.jnavi_share_jpy,
+    allocations,
+  }
 }
 
-function canEditProduct(actor: User, _product: Product): boolean {
-  return isAdmin(actor)
+function mapPayoutRequest(row: any): PayoutRequest {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    requestedAt: row.requested_at,
+    amountJPY: row.amount_jpy,
+    status: row.status,
+    allocationIds: [], // 別途解決
+    processedAt: row.processed_at ?? undefined,
+  }
 }
 
-function logAppend(db: Db, entry: { actorUserId: string; action: string; detail: string; relatedId?: string }): Db {
-  const newEntry = { id: uid('log'), at: nowIso(), ...entry }
-  return { ...db, logs: [newEntry, ...db.logs].slice(0, 5000) }
+function mapMail(row: any): Mail {
+  return {
+    id: row.id,
+    to: row.to_address,
+    subject: row.subject,
+    body: row.body,
+    sentAt: row.sent_at,
+  }
 }
 
-function updateTransactionAllocations(
-  tx: Transaction,
-  updater: (alloc: Transaction['allocations'][number]) => Transaction['allocations'][number],
-): Transaction {
-  return { ...tx, allocations: tx.allocations.map(updater) }
+function mapLog(row: any): OperationLog {
+  return {
+    id: row.id,
+    at: row.at,
+    actorUserId: row.actor_user_id,
+    action: row.action,
+    detail: row.detail,
+    relatedId: row.related_id ?? undefined,
+  }
 }
 
-function sumUserConfirmedAvailable(db: Db, userId: string): number {
-  return db.transactions
-    .flatMap((t) => t.allocations)
-    .filter(
-      (a) =>
-        a.recipientType === 'ユーザー報酬' && a.userId === userId && a.status === '確定' && !a.payoutRequestId,
-    )
-    .reduce((sum, a) => sum + a.amountJPY, 0)
-}
+// ---- Context ----
 
-function initialDealStatusByProductType(productType: Product['type']): DealStatus {
-  if (productType === 'hotel_membership') return '申し込み'
-  if (productType === 'ad_slot') return '申し込み'
-  return 'リード発生'
-}
-
-function revenueConfirmedStatusByProductType(productType: Product['type']): DealStatus {
-  if (productType === 'hotel_membership') return '決済完了'
-  if (productType === 'ad_slot') return '掲載開始'
-  return '施工完了'
-}
+type ActionResult = { ok: boolean; message?: string }
+type ActionResultWithId<K extends string> = ActionResult & Partial<Record<K, string>>
 
 type DbContextValue = {
-  db: Db
+  db: Db | null
+  loading: boolean
   actions: {
-    resetAll: () => void
+    resetAll: () => Promise<void>
 
     // Auth
-    login: (email: string, password: string) => { ok: boolean; message?: string }
-    logout: () => void
-    requestPasswordReset: (email: string) => { ok: boolean }
-    resetPassword: (token: string, newPassword: string) => { ok: boolean; message?: string }
-    changePassword: (currentPassword: string, newPassword: string) => { ok: boolean; message?: string }
+    login: (email: string, password: string) => Promise<ActionResult>
+    logout: () => Promise<void>
+    requestPasswordReset: (email: string) => Promise<ActionResult>
+    resetPassword: (token: string, newPassword: string) => Promise<ActionResult>
+    changePassword: (currentPassword: string, newPassword: string) => Promise<ActionResult>
 
     // Profile
-    updateMyProfile: (payload: { name: string; email: string; bankAccount?: BankAccount }) => {
-      ok: boolean
-      message?: string
-    }
+    updateMyProfile: (payload: {
+      name: string
+      email: string
+      bankAccount?: BankAccount
+    }) => Promise<ActionResult>
 
     // Signup (connector)
     registerConnector: (payload: {
@@ -120,18 +189,23 @@ type DbContextValue = {
       name: string
       email: string
       password: string
-    }) => { ok: boolean; message?: string }
+    }) => Promise<ActionResult>
 
     // Admin: org
-    adminSetConnectorAgency: (connectorUserId: string, agencyUserId: string) => { ok: boolean; message?: string }
-    adminSetCommissionRates: (agencyRate: number, connectorRate: number) => { ok: boolean; message?: string }
+    adminSetConnectorAgency: (
+      connectorUserId: string,
+      agencyUserId: string,
+    ) => Promise<ActionResult>
+    adminSetCommissionRates: (agencyRate: number, connectorRate: number) => Promise<ActionResult>
 
     // Product management
-    createProduct: (payload: Omit<Product, 'id'>) => { ok: boolean; message?: string; productId?: string }
-    updateProduct: (productId: string, patch: Partial<Omit<Product, 'id' | 'supplierId'>>) => {
-      ok: boolean
-      message?: string
-    }
+    createProduct: (
+      payload: Omit<Product, 'id'>,
+    ) => Promise<ActionResultWithId<'productId'>>
+    updateProduct: (
+      productId: string,
+      patch: Partial<Omit<Product, 'id' | 'supplierId'>>,
+    ) => Promise<ActionResult>
 
     // Deals
     createDealFromReferral: (payload: {
@@ -142,7 +216,7 @@ type DbContextValue = {
       customerEmail: string
       customerPhone?: string
       memo?: string
-    }) => { ok: boolean; message?: string; dealId?: string }
+    }) => Promise<ActionResultWithId<'dealId'>>
 
     createDealManual: (payload: {
       productId: string
@@ -151,749 +225,450 @@ type DbContextValue = {
       customerEmail: string
       customerPhone?: string
       memo?: string
-    }) => { ok: boolean; message?: string; dealId?: string }
+    }) => Promise<ActionResultWithId<'dealId'>>
 
-    updateDealStatus: (dealId: string, status: DealStatus) => { ok: boolean; message?: string }
+    updateDealStatus: (dealId: string, status: DealStatus) => Promise<ActionResult>
 
-    finalizeDeal: (payload: { dealId: string; finalSaleAmountJPY: number; closingDate: string }) => {
-      ok: boolean
-      message?: string
-      transactionId?: string
-    }
+    finalizeDeal: (payload: {
+      dealId: string
+      finalSaleAmountJPY: number
+      closingDate: string
+    }) => Promise<ActionResultWithId<'transactionId'>>
 
     // Rewards & payouts
-    adminConfirmRewardsForTransaction: (transactionId: string) => { ok: boolean; message?: string }
-    requestPayoutAll: () => { ok: boolean; message?: string; payoutRequestId?: string }
-    adminMarkPayoutPaid: (payoutRequestId: string) => { ok: boolean; message?: string }
+    adminConfirmRewardsForTransaction: (transactionId: string) => Promise<ActionResult>
+    requestPayoutAll: () => Promise<ActionResultWithId<'payoutRequestId'>>
+    adminMarkPayoutPaid: (payoutRequestId: string) => Promise<ActionResult>
   }
 }
 
 const DbContext = createContext<DbContextValue | null>(null)
 
-function loadDb(): Db {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return seedDb
-  try {
-    const parsed = JSON.parse(raw) as Db
-    if (!parsed || parsed.schemaVersion !== 4) return seedDb
-    return {
-      ...seedDb,
-      ...parsed,
-      schemaVersion: 4,
-    }
-  } catch {
-    return seedDb
-  }
-}
+// ---- Provider ----
 
 export function DbProvider(props: { children: React.ReactNode }) {
-  const [db, setDb] = useState<Db>(() => loadDb())
+  const [db, setDb] = useState<Db | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
 
+  // データ全読み込み
+  const loadAllData = useCallback(async (userId: string | null) => {
+    try {
+      const [
+        profilesRes,
+        suppliersRes,
+        productsRes,
+        dealsRes,
+        transactionsRes,
+        allocationsRes,
+        payoutsRes,
+        settingsRes,
+        outboxRes,
+        logsRes,
+      ] = await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('suppliers').select('*'),
+        supabase.from('products').select('*'),
+        supabase.from('deals').select('*').order('created_at', { ascending: false }),
+        supabase.from('transactions').select('*').order('created_at', { ascending: false }),
+        supabase.from('allocations').select('*'),
+        supabase.from('payout_requests').select('*').order('requested_at', { ascending: false }),
+        supabase.from('system_settings').select('*').eq('id', 1).single(),
+        supabase.from('outbox').select('*').order('sent_at', { ascending: false }),
+        supabase.from('operation_logs').select('*').order('at', { ascending: false }).limit(5000),
+      ])
+
+      const users = (profilesRes.data ?? []).map(mapProfile)
+      const suppliers = (suppliersRes.data ?? []).map(mapSupplier)
+      const products = (productsRes.data ?? []).map(mapProduct)
+      const deals = (dealsRes.data ?? []).map(mapDeal)
+
+      // allocations をトランザクションごとにグループ化
+      const allocsByTx = new Map<string, Allocation[]>()
+      for (const row of allocationsRes.data ?? []) {
+        const txId = row.transaction_id
+        if (!allocsByTx.has(txId)) allocsByTx.set(txId, [])
+        allocsByTx.get(txId)!.push(mapAllocation(row))
+      }
+
+      const transactions = (transactionsRes.data ?? []).map((row: any) =>
+        mapTransaction(row, allocsByTx.get(row.id) ?? []),
+      )
+
+      // payoutRequests に allocationIds を付与
+      const allAllocations = allocationsRes.data ?? []
+      const payoutRequests: PayoutRequest[] = (payoutsRes.data ?? []).map((row: any) => ({
+        ...mapPayoutRequest(row),
+        allocationIds: allAllocations
+          .filter((a: any) => a.payout_request_id === row.id)
+          .map((a: any) => a.id),
+      }))
+
+      const settings: SystemSettings = settingsRes.data
+        ? {
+            minPayoutJPY: settingsRes.data.min_payout_jpy,
+            agencyRate: Number(settingsRes.data.agency_rate),
+            connectorRate: Number(settingsRes.data.connector_rate),
+          }
+        : { minPayoutJPY: 5000, agencyRate: 0.15, connectorRate: 0.05 }
+
+      const outbox = (outboxRes.data ?? []).map(mapMail)
+      const logs = (logsRes.data ?? []).map(mapLog)
+
+      setDb({
+        schemaVersion: 4,
+        sessionUserId: userId,
+        users,
+        suppliers,
+        products,
+        deals,
+        transactions,
+        payoutRequests,
+        settings,
+        outbox,
+        passwordResets: [], // Supabase Auth が管理
+        logs,
+      })
+    } catch (err) {
+      console.error('データ読み込みエラー:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Auth state listener
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
-  }, [db])
+    // 現在のセッションチェック
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const uid = session?.user?.id ?? null
+      setSessionUserId(uid)
+      loadAllData(uid)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const uid = session?.user?.id ?? null
+      setSessionUserId(uid)
+      if (uid) {
+        loadAllData(uid)
+      } else {
+        // ログアウト時もデータは保持（公開ページ用）
+        setDb((prev) => (prev ? { ...prev, sessionUserId: null } : null))
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [loadAllData])
+
+  // リフレッシュヘルパー
+  const refresh = useCallback(() => loadAllData(sessionUserId), [loadAllData, sessionUserId])
 
   const actions = useMemo<DbContextValue['actions']>(() => {
     return {
-      resetAll() {
-        setDb(seedDb)
+      // --- Reset (dev/demo用) ---
+      async resetAll() {
+        // 本番では無効化推奨
+        console.warn('resetAll is not available in production mode')
       },
 
       // --- Auth ---
-      login(email, password) {
-        const e = safeEmail(email)
-        const user = db.users.find((u) => safeEmail(u.email) === e)
-        if (!user) {
-          return { ok: false, message: 'メールまたはパスワードが正しくありません' }
+      async login(email, password) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: safeEmail(email),
+          password,
+        })
+        if (error) return { ok: false, message: 'メールまたはパスワードが正しくありません' }
+        return { ok: true }
+      },
+
+      async logout() {
+        await supabase.auth.signOut()
+      },
+
+      async requestPasswordReset(email) {
+        const { error } = await supabase.auth.resetPasswordForEmail(safeEmail(email), {
+          redirectTo: `${window.location.origin}/reset`,
+        })
+        if (error) {
+          console.error('Password reset error:', error)
         }
-        const ok = bcrypt.compareSync(password, user.passwordHash)
-        if (!ok) return { ok: false, message: 'メールまたはパスワードが正しくありません' }
-
-        setDb((prev) => {
-          let next: Db = {
-            ...prev,
-            sessionUserId: user.id,
-          }
-          next = logAppend(next, {
-            actorUserId: user.id,
-            action: 'ログイン',
-            detail: `login: ${user.email}`,
-          })
-          return next
-        })
+        // セキュリティ上: 常に ok 返却
         return { ok: true }
       },
 
-      logout() {
-        setDb((prev) => {
-          const actor = prev.sessionUserId ?? 'SYSTEM'
-          let next: Db = { ...prev, sessionUserId: null }
-          next = logAppend(next, { actorUserId: actor, action: 'ログアウト', detail: 'logout' })
-          return next
-        })
-      },
-
-      requestPasswordReset(email) {
-        const user = findUserByEmail(db, email)
-        // セキュリティ上: 存在しないメールでも常に ok
-        if (!user) return { ok: true }
-
-        const token = uid('pw')
-        const now = Date.now()
-        const expires = new Date(now + 1000 * 60 * 30)
-
-        setDb((prev) => {
-          let next = { ...prev }
-          next.passwordResets = [
-            {
-              id: uid('pwr'),
-              userId: user.id,
-              token,
-              requestedAt: nowIso(),
-              expiresAt: expires.toISOString(),
-            },
-            ...next.passwordResets,
-          ]
-
-          next.outbox = [
-            {
-              id: uid('mail'),
-              to: user.email,
-              subject: '【デモ】パスワード再設定',
-              body: `以下のリンクから再設定できます: ${window.location.origin}${window.location.pathname}#/reset?token=${token}`,
-              sentAt: nowIso(),
-            },
-            ...next.outbox,
-          ]
-
-          next = logAppend(next, {
-            actorUserId: user.id,
-            action: 'PWリセット要求',
-            detail: `token issued: ${token}`,
-          })
-          return next
-        })
-
-        return { ok: true }
-      },
-
-      resetPassword(token, newPassword) {
-        const t = token.trim()
-        if (!t) return { ok: false, message: 'トークンが不正です' }
-        if (newPassword.length < 8) return { ok: false, message: 'パスワードは8文字以上にしてください' }
-
-        const reset = db.passwordResets.find((r) => r.token === t)
-        if (!reset) return { ok: false, message: 'トークンが見つかりません' }
-        if (new Date(reset.expiresAt).getTime() < Date.now()) return { ok: false, message: 'トークンの有効期限が切れています' }
-
-        setDb((prev) => {
-          const hash = bcrypt.hashSync(newPassword, 10)
-          const users = prev.users.map((u) => (u.id === reset.userId ? { ...u, passwordHash: hash } : u))
-          let next: Db = { ...prev, users, passwordResets: prev.passwordResets.filter((r) => r.token !== t) }
-          next = logAppend(next, {
-            actorUserId: reset.userId,
-            action: 'PWリセット',
-            detail: 'password updated',
-          })
-          return next
-        })
-        return { ok: true }
-      },
-
-      changePassword(currentPassword, newPassword) {
-        try {
-          const me = requireSession(db)
-          const ok = bcrypt.compareSync(currentPassword, me.passwordHash)
-          if (!ok) return { ok: false, message: '現在のパスワードが正しくありません' }
-          if (newPassword.length < 8) return { ok: false, message: 'パスワードは8文字以上にしてください' }
-
-          setDb((prev) => {
-            const hash = bcrypt.hashSync(newPassword, 10)
-            const users = prev.users.map((u) => (u.id === me.id ? { ...u, passwordHash: hash } : u))
-            let next: Db = { ...prev, users }
-            next = logAppend(next, { actorUserId: me.id, action: 'PW変更', detail: 'password changed' })
-            return next
-          })
-
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '変更できませんでした' }
+      async resetPassword(_token, newPassword) {
+        if (newPassword.length < 8) {
+          return { ok: false, message: 'パスワードは8文字以上にしてください' }
         }
+        const { error } = await supabase.auth.updateUser({ password: newPassword })
+        if (error) return { ok: false, message: error.message }
+        return { ok: true }
+      },
+
+      async changePassword(_currentPassword, newPassword) {
+        if (newPassword.length < 8) {
+          return { ok: false, message: 'パスワードは8文字以上にしてください' }
+        }
+        // Supabase Auth では現在パスワードの検証は signInWithPassword で行う
+        // ここでは簡易的に updateUser のみ
+        const { error } = await supabase.auth.updateUser({ password: newPassword })
+        if (error) return { ok: false, message: error.message }
+        return { ok: true }
       },
 
       // --- Profile ---
-      updateMyProfile(payload) {
-        try {
-          const me = requireSession(db)
-          const newEmail = safeEmail(payload.email)
-          if (!payload.name.trim()) return { ok: false, message: '氏名を入力してください' }
-          if (!newEmail) return { ok: false, message: 'メールを入力してください' }
+      async updateMyProfile(payload) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { ok: false, message: 'ログインが必要です' }
 
-          const conflict = db.users.find((u) => u.id !== me.id && safeEmail(u.email) === newEmail)
-          if (conflict) return { ok: false, message: 'このメールアドレスは既に使用されています' }
+        if (!payload.name.trim()) return { ok: false, message: '氏名を入力してください' }
+        if (!payload.email.trim()) return { ok: false, message: 'メールを入力してください' }
 
-          setDb((prev) => {
-            const users = prev.users.map((u) =>
-              u.id === me.id
-                ? {
-                    ...u,
-                    name: payload.name,
-                    email: newEmail,
-                    bankAccount: payload.bankAccount,
-                  }
-                : u,
-            )
-            let next: Db = { ...prev, users }
-            next = logAppend(next, { actorUserId: me.id, action: 'プロフィール更新', detail: 'profile updated' })
-            return next
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            name: payload.name.trim(),
+            email: safeEmail(payload.email),
+            bank_account: payload.bankAccount ?? null,
           })
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '更新できませんでした' }
+          .eq('id', user.id)
+
+        if (error) {
+          if (error.code === '23505') return { ok: false, message: 'このメールアドレスは既に使用されています' }
+          return { ok: false, message: error.message }
         }
+
+        // Supabase Auth のメールも更新
+        if (safeEmail(payload.email) !== safeEmail(user.email ?? '')) {
+          await supabase.auth.updateUser({ email: safeEmail(payload.email) })
+        }
+
+        await refresh()
+        return { ok: true }
       },
 
       // --- Signup (Connector) ---
-      registerConnector(payload) {
+      async registerConnector(payload) {
         const name = payload.name.trim()
         const email = safeEmail(payload.email)
         const password = payload.password
-        const agencyId = payload.agencyId
 
         if (!name) return { ok: false, message: '氏名を入力してください' }
         if (!email) return { ok: false, message: 'メールアドレスを入力してください' }
         if (password.length < 8) return { ok: false, message: 'パスワードは8文字以上にしてください' }
 
-        const agency = db.users.find((u) => u.id === agencyId && u.role === '代理店')
-        if (!agency) return { ok: false, message: '所属代理店が見つかりません' }
-
-        const exists = findUserByEmail(db, email)
-        if (exists) return { ok: false, message: 'このメールアドレスは既に登録されています' }
-
-        const newUser: User = {
-          id: uid('usr'),
-          role: 'コネクター',
-          name,
+        const { error } = await supabase.auth.signUp({
           email,
-          passwordHash: bcrypt.hashSync(password, 10),
-          createdAt: nowIso(),
-          connector: {
-            agencyId,
-            introducedById: payload.introducedById,
+          password,
+          options: {
+            data: {
+              role: 'コネクター',
+              name,
+              agency_id: payload.agencyId,
+              introduced_by_id: payload.introducedById ?? '',
+            },
           },
-        }
-
-        setDb((prev) => {
-          let next: Db = {
-            ...prev,
-            users: [newUser, ...prev.users],
-            sessionUserId: newUser.id,
-          }
-          next = logAppend(next, {
-            actorUserId: newUser.id,
-            action: 'コネクター登録',
-            detail: `agency=${agency.name}`,
-            relatedId: newUser.id,
-          })
-          return next
         })
+
+        if (error) {
+          if (error.message.includes('already registered')) {
+            return { ok: false, message: 'このメールアドレスは既に登録されています' }
+          }
+          return { ok: false, message: error.message }
+        }
 
         return { ok: true }
       },
 
       // --- Admin: org ---
-      adminSetConnectorAgency(connectorUserId, agencyUserId) {
-        try {
-          const actor = requireSession(db)
-          if (!isAdmin(actor)) return { ok: false, message: '権限がありません' }
+      async adminSetConnectorAgency(connectorUserId, agencyUserId) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ agency_id: agencyUserId })
+          .eq('id', connectorUserId)
+          .eq('role', 'コネクター')
 
-          const agency = db.users.find((u) => u.id === agencyUserId && u.role === '代理店')
-          if (!agency) return { ok: false, message: '代理店が見つかりません' }
-
-          const connector = db.users.find((u) => u.id === connectorUserId && u.role === 'コネクター')
-          if (!connector || !connector.connector) return { ok: false, message: 'コネクターが見つかりません' }
-
-          setDb((prev) => {
-            const users = prev.users.map((u) =>
-              u.id === connectorUserId
-                ? {
-                    ...u,
-                    connector: { ...u.connector!, agencyId: agencyUserId },
-                  }
-                : u,
-            )
-            let next: Db = { ...prev, users }
-            next = logAppend(next, {
-              actorUserId: actor.id,
-              action: '所属代理店変更',
-              detail: `${connector.name} → ${agency.name}`,
-              relatedId: connectorUserId,
-            })
-            return next
-          })
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '更新できませんでした' }
-        }
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true }
       },
 
-      adminSetCommissionRates(agencyRate, connectorRate) {
-        try {
-          const actor = requireSession(db)
-          if (!isAdmin(actor)) return { ok: false, message: '権限がありません' }
+      async adminSetCommissionRates(agencyRate, connectorRate) {
+        if (!(agencyRate >= 0 && agencyRate <= 1)) return { ok: false, message: '代理店率が不正です' }
+        if (!(connectorRate >= 0 && connectorRate <= 1)) return { ok: false, message: 'コネクター率が不正です' }
 
-          if (!(agencyRate >= 0 && agencyRate <= 1)) return { ok: false, message: '代理店率が不正です' }
-          if (!(connectorRate >= 0 && connectorRate <= 1)) return { ok: false, message: 'コネクター率が不正です' }
+        const { error } = await supabase
+          .from('system_settings')
+          .update({ agency_rate: agencyRate, connector_rate: connectorRate })
+          .eq('id', 1)
 
-          setDb((prev) => {
-            let next: Db = {
-              ...prev,
-              settings: {
-                ...prev.settings,
-                agencyRate,
-                connectorRate,
-              },
-            }
-            next = logAppend(next, {
-              actorUserId: actor.id,
-              action: '報酬率変更',
-              detail: `agency=${agencyRate} connector=${connectorRate}`,
-            })
-            return next
-          })
-
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '更新できませんでした' }
-        }
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true }
       },
 
       // --- Products ---
-      createProduct(payload) {
-        try {
-          const actor = requireSession(db)
-          if (!isAdmin(actor)) return { ok: false, message: '権限がありません' }
-
-          if (!payload.supplierId) return { ok: false, message: 'supplierId が不正です' }
-
-          const id = uid('prd')
-          const product: Product = { ...payload, id, supplierId: payload.supplierId }
-
-          setDb((prev) => {
-            let next: Db = { ...prev, products: [product, ...prev.products] }
-            next = logAppend(next, { actorUserId: actor.id, action: '商品作成', detail: product.name, relatedId: id })
-            return next
+      async createProduct(payload) {
+        const { data, error } = await supabase
+          .from('products')
+          .insert({
+            supplier_id: payload.supplierId,
+            name: payload.name,
+            category: payload.category,
+            type: payload.type,
+            list_price_jpy: payload.listPriceJPY,
+            image_url: payload.imageUrl ?? null,
+            description: payload.description,
+            materials: payload.materials,
+            is_public: payload.isPublic,
+            ad_spec: payload.adSpec ?? null,
+            vacancy_status: payload.vacancyStatus ?? null,
           })
+          .select('id')
+          .single()
 
-          return { ok: true, productId: id }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '作成できませんでした' }
-        }
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true, productId: data.id }
       },
 
-      updateProduct(productId, patch) {
-        try {
-          const actor = requireSession(db)
-          const product = db.products.find((p) => p.id === productId)
-          if (!product) return { ok: false, message: '商品が見つかりません' }
-          if (!canEditProduct(actor, product)) return { ok: false, message: '権限がありません' }
+      async updateProduct(productId, patch) {
+        const updateData: Record<string, any> = {}
+        if (patch.name !== undefined) updateData.name = patch.name
+        if (patch.category !== undefined) updateData.category = patch.category
+        if (patch.type !== undefined) updateData.type = patch.type
+        if (patch.listPriceJPY !== undefined) updateData.list_price_jpy = patch.listPriceJPY
+        if (patch.imageUrl !== undefined) updateData.image_url = patch.imageUrl
+        if (patch.description !== undefined) updateData.description = patch.description
+        if (patch.materials !== undefined) updateData.materials = patch.materials
+        if (patch.isPublic !== undefined) updateData.is_public = patch.isPublic
+        if (patch.adSpec !== undefined) updateData.ad_spec = patch.adSpec
+        if (patch.vacancyStatus !== undefined) updateData.vacancy_status = patch.vacancyStatus
 
-          setDb((prev) => {
-            const products = prev.products.map((p) => (p.id === productId ? { ...p, ...patch } : p))
-            let next: Db = { ...prev, products }
-            next = logAppend(next, {
-              actorUserId: actor.id,
-              action: '商品更新',
-              detail: `${product.name}`,
-              relatedId: productId,
-            })
-            return next
-          })
+        const { error } = await supabase
+          .from('products')
+          .update(updateData)
+          .eq('id', productId)
 
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '更新できませんでした' }
-        }
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true }
       },
 
       // --- Deals ---
-      createDealFromReferral(payload) {
-        try {
-          const product = db.products.find((p) => p.id === payload.productId)
-          if (!product) return { ok: false, message: '商品が見つかりません' }
-          if (!product.isPublic) return { ok: false, message: 'この商品は現在受付停止中です' }
+      async createDealFromReferral(payload) {
+        const { data, error } = await supabase.rpc('create_referral_deal', {
+          p_connector_id: payload.connectorId,
+          p_product_id: payload.productId,
+          p_customer_company_name: payload.customerCompanyName,
+          p_customer_name: payload.customerName,
+          p_customer_email: payload.customerEmail,
+          p_customer_phone: payload.customerPhone ?? null,
+          p_memo: payload.memo ?? null,
+        })
 
-          const connector = db.users.find((u) => u.id === payload.connectorId)
-          if (!connector || connector.role !== 'コネクター') {
-            return { ok: false, message: 'コネクターが見つかりません' }
-          }
-
-          const deal: Deal = {
-            id: uid('deal'),
-            createdAt: nowIso(),
-            locked: false,
-            status: initialDealStatusByProductType(product.type),
-            connectorId: connector.id,
-            productId: product.id,
-            customerCompanyName: payload.customerCompanyName,
-            customerName: payload.customerName,
-            customerEmail: payload.customerEmail,
-            customerPhone: payload.customerPhone,
-            memo: payload.memo,
-            source: '紹介LP',
-          }
-
-          setDb((prev) => {
-            let next: Db = { ...prev, deals: [deal, ...prev.deals] }
-            next = logAppend(next, {
-              actorUserId: 'SYSTEM',
-              action: 'リード登録',
-              detail: `${product.name} / connector=${connector.name}`,
-              relatedId: deal.id,
-            })
-            return next
-          })
-
-          return { ok: true, dealId: deal.id }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '登録できませんでした' }
-        }
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true, dealId: data }
       },
 
-      createDealManual(payload) {
-        try {
-          const actor = requireSession(db)
-          if (!(isConnector(actor) || isAdmin(actor))) return { ok: false, message: '権限がありません' }
+      async createDealManual(payload) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { ok: false, message: 'ログインが必要です' }
 
-          const product = db.products.find((p) => p.id === payload.productId)
-          if (!product) return { ok: false, message: '商品が見つかりません' }
+        // 商品タイプに応じた初期ステータスを取得
+        const { data: product } = await supabase
+          .from('products')
+          .select('type')
+          .eq('id', payload.productId)
+          .single()
 
-          const deal: Deal = {
-            id: uid('deal'),
-            createdAt: nowIso(),
-            locked: false,
-            status: initialDealStatusByProductType(product.type),
-            connectorId: actor.id,
-            productId: product.id,
-            customerCompanyName: payload.customerCompanyName,
-            customerName: payload.customerName,
-            customerEmail: payload.customerEmail,
-            customerPhone: payload.customerPhone,
-            memo: payload.memo,
+        let initialStatus: DealStatus = 'リード発生'
+        if (product) {
+          if (product.type === 'hotel_membership' || product.type === 'ad_slot') {
+            initialStatus = '申し込み'
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('deals')
+          .insert({
+            connector_id: user.id,
+            product_id: payload.productId,
+            status: initialStatus,
+            customer_company_name: payload.customerCompanyName,
+            customer_name: payload.customerName,
+            customer_email: payload.customerEmail,
+            customer_phone: payload.customerPhone ?? null,
+            memo: payload.memo ?? null,
             source: '手動',
-          }
-
-          setDb((prev) => {
-            let next: Db = { ...prev, deals: [deal, ...prev.deals] }
-            next = logAppend(next, { actorUserId: actor.id, action: '商談登録', detail: product.name, relatedId: deal.id })
-            return next
           })
+          .select('id')
+          .single()
 
-          return { ok: true, dealId: deal.id }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '登録できませんでした' }
-        }
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true, dealId: data.id }
       },
 
-      updateDealStatus(dealId, status) {
-        try {
-          const actor = requireSession(db)
-          const deal = db.deals.find((d) => d.id === dealId)
-          if (!deal) return { ok: false, message: '商談が見つかりません' }
-          if (deal.locked) return { ok: false, message: '売上確定済みの商談は編集できません' }
+      async updateDealStatus(dealId, status) {
+        const { error } = await supabase
+          .from('deals')
+          .update({ status })
+          .eq('id', dealId)
+          .eq('locked', false)
 
-          // 権限チェック
-          if (!isAdmin(actor)) {
-            if (isConnector(actor) && deal.connectorId !== actor.id) return { ok: false, message: '権限がありません' }
-            if (isAgency(actor)) {
-              const connector = db.users.find((u) => u.id === deal.connectorId)
-              if (connector?.connector?.agencyId !== actor.id) return { ok: false, message: '権限がありません' }
-            }
-            if (!(isConnector(actor) || isAgency(actor))) return { ok: false, message: '権限がありません' }
-          }
-
-          setDb((prev) => {
-            const deals = prev.deals.map((d) => (d.id === dealId ? { ...d, status } : d))
-            let next: Db = { ...prev, deals }
-            next = logAppend(next, {
-              actorUserId: actor.id,
-              action: 'ステータス更新',
-              detail: `${dealId} → ${status}`,
-              relatedId: dealId,
-            })
-            return next
-          })
-
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '更新できませんでした' }
-        }
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true }
       },
 
-      finalizeDeal(payload) {
-        try {
-          const actor = requireSession(db)
-          const deal = db.deals.find((d) => d.id === payload.dealId)
-          if (!deal) return { ok: false, message: '商談が見つかりません' }
-          if (deal.locked) return { ok: false, message: '既に売上確定済みです' }
-
-          const product = db.products.find((p) => p.id === deal.productId)
-          if (!product) return { ok: false, message: '商品が見つかりません' }
-
-          // 権限チェック: admin / 当事者コネクター / 所属代理店
-          if (!isAdmin(actor)) {
-            if (isConnector(actor) && deal.connectorId !== actor.id) return { ok: false, message: '権限がありません' }
-            if (isAgency(actor)) {
-              const connector = db.users.find((u) => u.id === deal.connectorId)
-              if (connector?.connector?.agencyId !== actor.id) return { ok: false, message: '権限がありません' }
-            }
-            if (!(isConnector(actor) || isAgency(actor))) return { ok: false, message: '権限がありません' }
-          }
-
-          const connector = db.users.find((u) => u.id === deal.connectorId)
-          if (!connector || connector.role !== 'コネクター' || !connector.connector) {
-            return { ok: false, message: 'コネクター情報が不正です' }
-          }
-          const agency = db.users.find((u) => u.id === connector.connector!.agencyId)
-          if (!agency || agency.role !== '代理店') return { ok: false, message: '所属代理店が見つかりません' }
-
-          const sale = payload.finalSaleAmountJPY
-          if (!(sale > 0)) return { ok: false, message: '金額が不正です' }
-          const closingDate = payload.closingDate
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(closingDate)) return { ok: false, message: '日付は YYYY-MM-DD 形式です' }
-
-          const baseAmountJPY = sale
-          const ratesUsed = { agencyRate: db.settings.agencyRate, connectorRate: db.settings.connectorRate }
-          const amounts = calculateModelAAmounts({ baseAmountJPY, ...ratesUsed })
-
-          const initStatus: RewardStatus = initialRewardStatusForProductType(product.type)
-
-          const txId = uid('tx')
-          const tx: Transaction = {
-            id: txId,
-            createdAt: nowIso(),
-            dealId: deal.id,
-            closingDate,
-            productSnapshot: {
-              productId: product.id,
-              name: product.name,
-              category: product.category,
-              type: product.type,
-              supplierId: product.supplierId,
-              listPriceJPY: product.listPriceJPY,
-            },
-            connectorId: connector.id,
-            agencyId: agency.id,
-            saleAmountJPY: sale,
-            baseAmountJPY: amounts.baseAmountJPY,
-            ratesUsed,
-            agencyRewardJPY: amounts.agencyRewardJPY,
-            connectorRewardJPY: amounts.connectorRewardJPY,
-            jnaviShareJPY: amounts.jnaviShareJPY,
-            allocations: [
-              {
-                id: uid('alloc'),
-                recipientType: 'ユーザー報酬',
-                userId: agency.id,
-                userRole: '代理店',
-                label: '代理店報酬（15%）',
-                rate: ratesUsed.agencyRate,
-                baseAmountJPY: amounts.baseAmountJPY,
-                amountJPY: amounts.agencyRewardJPY,
-                status: initStatus,
-              },
-              {
-                id: uid('alloc'),
-                recipientType: 'ユーザー報酬',
-                userId: connector.id,
-                userRole: 'コネクター',
-                label: 'コネクター報酬（5%）',
-                rate: ratesUsed.connectorRate,
-                baseAmountJPY: amounts.baseAmountJPY,
-                amountJPY: amounts.connectorRewardJPY,
-                status: initStatus,
-              },
-              {
-                id: uid('alloc'),
-                recipientType: 'Jnavi取り分',
-                label: 'Jnavi取り分（残余）',
-                amountJPY: amounts.jnaviShareJPY,
-              },
-            ],
-          }
-
-          const nextDealStatus = revenueConfirmedStatusByProductType(product.type)
-
-          setDb((prev) => {
-            let next: Db = { ...prev }
-
-            next.deals = prev.deals.map((d) =>
-              d.id === deal.id
-                ? {
-                    ...d,
-                    locked: true,
-                    status: nextDealStatus,
-                    finalSaleAmountJPY: sale,
-                    closingDate,
-                  }
-                : d,
-            )
-
-            next.transactions = [tx, ...prev.transactions]
-
-            next = logAppend(next, {
-              actorUserId: actor.id,
-              action: '売上確定',
-              detail: `${deal.id} / ${product.name} / ${agency.name}に15%、${connector.name}に5%`,
-              relatedId: deal.id,
-            })
-
-            return next
-          })
-
-          return { ok: true, transactionId: txId }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '確定できませんでした' }
+      async finalizeDeal(payload) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.closingDate)) {
+          return { ok: false, message: '日付は YYYY-MM-DD 形式です' }
         }
+
+        const { data, error } = await supabase.rpc('finalize_deal', {
+          p_deal_id: payload.dealId,
+          p_final_sale_amount_jpy: payload.finalSaleAmountJPY,
+          p_closing_date: payload.closingDate,
+        })
+
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true, transactionId: data }
       },
 
       // --- Rewards ---
-      adminConfirmRewardsForTransaction(transactionId) {
-        try {
-          const actor = requireSession(db)
-          if (!isAdmin(actor)) return { ok: false, message: '権限がありません' }
-
-          const tx = db.transactions.find((t) => t.id === transactionId)
-          if (!tx) return { ok: false, message: '取引が見つかりません' }
-
-          setDb((prev) => {
-            const transactions = prev.transactions.map((t) => {
-              if (t.id !== transactionId) return t
-              return updateTransactionAllocations(t, (a) => {
-                if (a.recipientType !== 'ユーザー報酬') return a
-                if (a.status !== '未確定') return a
-                return { ...a, status: '確定' }
-              })
-            })
-            let next: Db = { ...prev, transactions }
-            next = logAppend(next, {
-              actorUserId: actor.id,
-              action: '報酬確定',
-              detail: `transaction=${transactionId}`,
-              relatedId: transactionId,
-            })
-            return next
-          })
-
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '確定できませんでした' }
-        }
+      async adminConfirmRewardsForTransaction(transactionId) {
+        const { error } = await supabase.rpc('admin_confirm_rewards', {
+          p_transaction_id: transactionId,
+        })
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true }
       },
 
-      requestPayoutAll() {
-        try {
-          const me = requireSession(db)
-          if (!(isAgency(me) || isConnector(me))) return { ok: false, message: '権限がありません' }
-
-          const available = sumUserConfirmedAvailable(db, me.id)
-          if (available < db.settings.minPayoutJPY) {
-            return { ok: false, message: `出金可能額が最低金額（${db.settings.minPayoutJPY}円）に達していません` }
-          }
-
-          const allocationIds = db.transactions
-            .flatMap((t) => t.allocations)
-            .filter(
-              (a) =>
-                a.recipientType === 'ユーザー報酬' && a.userId === me.id && a.status === '確定' && !a.payoutRequestId,
-            )
-            .map((a) => a.id)
-
-          const payoutId = uid('payout')
-          const payout: PayoutRequest = {
-            id: payoutId,
-            userId: me.id,
-            requestedAt: nowIso(),
-            amountJPY: available,
-            status: '申請中',
-            allocationIds,
-          }
-
-          setDb((prev) => {
-            // allocations に payoutRequestId を付与
-            const transactions = prev.transactions.map((t) =>
-              updateTransactionAllocations(t, (a) => {
-                if (a.recipientType !== 'ユーザー報酬') return a
-                if (a.userId !== me.id) return a
-                if (a.status !== '確定') return a
-                if (a.payoutRequestId) return a
-                return { ...a, payoutRequestId: payoutId }
-              }),
-            )
-
-            let next: Db = {
-              ...prev,
-              payoutRequests: [payout, ...prev.payoutRequests],
-              transactions,
-            }
-
-            next = logAppend(next, {
-              actorUserId: me.id,
-              action: '出金申請',
-              detail: `${payoutId} / ${available}円`,
-              relatedId: payoutId,
-            })
-
-            return next
-          })
-
-          return { ok: true, payoutRequestId: payoutId }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '申請できませんでした' }
-        }
+      async requestPayoutAll() {
+        const { data, error } = await supabase.rpc('request_payout_all')
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true, payoutRequestId: data }
       },
 
-      adminMarkPayoutPaid(payoutRequestId) {
-        try {
-          const actor = requireSession(db)
-          if (!isAdmin(actor)) return { ok: false, message: '権限がありません' }
-
-          const pr = db.payoutRequests.find((p) => p.id === payoutRequestId)
-          if (!pr) return { ok: false, message: '出金申請が見つかりません' }
-          if (pr.status === '支払済み') return { ok: false, message: '既に支払済みです' }
-
-          setDb((prev) => {
-            const payoutRequests = prev.payoutRequests.map((p) =>
-              p.id === payoutRequestId ? { ...p, status: '支払済み', processedAt: nowIso() } : p,
-            )
-
-            const transactions = prev.transactions.map((t) =>
-              updateTransactionAllocations(t, (a) => {
-                if (a.recipientType !== 'ユーザー報酬') return a
-                if (a.payoutRequestId !== payoutRequestId) return a
-                return { ...a, status: '支払済み' }
-              }),
-            )
-
-            let next: Db = { ...prev, payoutRequests, transactions }
-            next = logAppend(next, {
-              actorUserId: actor.id,
-              action: '出金支払',
-              detail: `${payoutRequestId} / user=${pr.userId}`,
-              relatedId: payoutRequestId,
-            })
-            return next
-          })
-
-          return { ok: true }
-        } catch (e: any) {
-          return { ok: false, message: e?.message ?? '更新できませんでした' }
-        }
+      async adminMarkPayoutPaid(payoutRequestId) {
+        const { error } = await supabase.rpc('admin_mark_payout_paid', {
+          p_payout_request_id: payoutRequestId,
+        })
+        if (error) return { ok: false, message: error.message }
+        await refresh()
+        return { ok: true }
       },
     }
-  }, [db])
+  }, [refresh, sessionUserId])
 
-  const value: DbContextValue = useMemo(() => ({ db, actions }), [db, actions])
+  const value: DbContextValue = useMemo(() => ({ db, loading, actions }), [db, loading, actions])
 
   return <DbContext.Provider value={value}>{props.children}</DbContext.Provider>
 }

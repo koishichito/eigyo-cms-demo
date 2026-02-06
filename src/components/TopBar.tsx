@@ -27,9 +27,11 @@ function titleFor(pathname: string): string {
 
 export function TopBar(props: { mobileOpen: boolean; setMobileOpen: (open: boolean) => void }) {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const location = useLocation()
   const navigate = useNavigate()
+
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   const title = titleFor(location.pathname)
 
@@ -62,8 +64,8 @@ export function TopBar(props: { mobileOpen: boolean; setMobileOpen: (open: boole
           </div>
           <button
             type="button"
-            onClick={() => {
-              actions.logout()
+            onClick={async () => {
+              await actions.logout()
               navigate('/login')
             }}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"

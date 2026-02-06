@@ -17,15 +17,16 @@ function JoinInner() {
     return sp.get('code') ?? ''
   }, [location.search])
 
-  const agencyList = useMemo(() => agencies(db), [db])
+  const agencyList = useMemo(() => (db ? agencies(db) : []), [db])
 
   const inviterAgency = useMemo(() => {
+    if (!db) return null
     const code = inviteCode.trim().toUpperCase()
     if (!code) return null
     return (
       db.users.find((u) => u.role === '代理店' && (u.agency?.inviteCode ?? '').toUpperCase() === code) ?? null
     )
-  }, [db.users, inviteCode])
+  }, [db, inviteCode])
 
   const [agencyId, setAgencyId] = useState<string>('')
   const [name, setName] = useState('')
@@ -136,7 +137,7 @@ function JoinInner() {
           <Button
             variant="primary"
             disabled={!canRegister}
-            onClick={() => {
+            onClick={async () => {
               if (!agencyId) {
                 toast.show('所属代理店を選択してください', 'error')
                 return
@@ -145,7 +146,7 @@ function JoinInner() {
                 toast.show('パスワードが一致しません', 'error')
                 return
               }
-              const res = actions.registerConnector({
+              const res = await actions.registerConnector({
                 agencyId,
                 introducedById: inviterAgency?.id,
                 name,

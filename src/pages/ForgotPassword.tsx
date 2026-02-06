@@ -27,8 +27,8 @@ function ForgotInner() {
 
           <Button
             variant="primary"
-            onClick={() => {
-              actions.requestPasswordReset(email)
+            onClick={async () => {
+              await actions.requestPasswordReset(email)
               toast.show('再設定メールを送信しました（該当アカウントがある場合）', 'success')
             }}
           >

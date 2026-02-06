@@ -1,4 +1,4 @@
-import { createHashRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
 import { DbProvider, useDb, getRoleHomePath, getSessionUser } from './state/DbProvider'
 import { AppShell } from './layout/AppShell'
 
@@ -28,26 +28,45 @@ import AdminRanksPage from './pages/admin/AdminRanks'
 import AdminLogsPage from './pages/admin/AdminLogs'
 
 function RequireAuth() {
-  const { db } = useDb()
+  const { db, loading } = useDb()
+  if (loading || !db) return <LoadingScreen />
   const u = getSessionUser(db)
   if (!u) return <Navigate to="/login" replace />
   return <Outlet />
 }
 
 function RequireRole(props: { roles: Array<'代理店' | 'コネクター' | 'J-Navi管理者'> }) {
-  const { db } = useDb()
+  const { db, loading } = useDb()
+  if (loading || !db) return <LoadingScreen />
   const u = getSessionUser(db)
   if (!u) return <Navigate to="/login" replace />
   if (!props.roles.includes(u.role as any)) return <Navigate to={getRoleHomePath(u)} replace />
   return <Outlet />
 }
 
-const router = createHashRouter([
+function LoadingScreen() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-[var(--jnavi-bg)]">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-[var(--jnavi-navy)] border-r-transparent" />
+        <p className="mt-4 text-sm text-gray-500">読み込み中...</p>
+      </div>
+    </div>
+  )
+}
+
+function RootLayout() {
+  const { loading } = useDb()
+  if (loading) return <LoadingScreen />
+  return <Outlet />
+}
+
+const router = createBrowserRouter([
   {
     path: '/',
     element: (
       <DbProvider>
-        <Outlet />
+        <RootLayout />
       </DbProvider>
     ),
     children: [
@@ -65,8 +84,6 @@ const router = createHashRouter([
         element: <RequireAuth />,
         children: [
           {
-            // NOTE: Public pages (login/join/...) must NOT render the sidebar/topbar.
-            // Otherwise the app throws "ログインが必要です" and shows a blank screen.
             element: <AppShell />,
             children: [
               // Common (all authenticated roles)

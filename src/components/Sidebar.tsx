@@ -48,6 +48,7 @@ function navForRole(role: string): NavItem[] {
 
 function NavContent(props: { onNavigate?: () => void }) {
   const { db } = useDb()
+  if (!db) return null
   const me = getCurrentUser(db)
   const navItems = navForRole(me.role)
 

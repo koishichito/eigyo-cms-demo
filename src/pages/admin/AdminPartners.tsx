@@ -9,8 +9,9 @@ import { formatJPY } from '../../utils/format'
 
 function AdminPartnersInner() {
   const { db, actions } = useDb()
-  const me = getCurrentUser(db)
   const toast = useToast()
+  if (!db) return null
+  const me = getCurrentUser(db)
 
   if (me.role !== 'J-Navi管理者') {
     return (
@@ -121,9 +122,9 @@ function AdminPartnersInner() {
                       <select
                         className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm"
                         value={agencyId ?? ''}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const newAgencyId = e.target.value
-                          const res = actions.adminSetConnectorAgency(c.id, newAgencyId)
+                          const res = await actions.adminSetConnectorAgency(c.id, newAgencyId)
                           if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                           else toast.show('所属代理店を更新しました', 'success')
                         }}

@@ -14,6 +14,7 @@ function sumMyAllocations(db: any, userId: string, status?: string) {
 
 export default function DashboardPage() {
   const { db } = useDb()
+  if (!db) return null
   const me = getCurrentUser(db)
 
   if (!(me.role === '代理店' || me.role === 'コネクター')) {

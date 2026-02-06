@@ -51,12 +51,12 @@ function ResetInner() {
 
           <Button
             variant="primary"
-            onClick={() => {
+            onClick={async () => {
               if (pw !== pw2) {
                 toast.show('パスワードが一致しません', 'error')
                 return
               }
-              const res = actions.resetPassword(token, pw)
+              const res = await actions.resetPassword(token, pw)
               if (!res.ok) {
                 toast.show(res.message ?? '失敗しました', 'error')
                 return
