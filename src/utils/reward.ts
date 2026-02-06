@@ -1,9 +1,10 @@
 import type { RewardStatus, ProductType } from '../state/types'
 
-// 報酬ロジック（Model A: 紹介モデル）
-// - 代理店: base × 15%（固定）
-// - コネクター: base × 5%（固定）
-// - Jnavi取り分: 残余
+// 報酬ロジック（Model A: 総額内分割方式）
+// - 報酬総額: base × agencyRate（例: 15%）
+// - コネクター: base × connectorRate（例: 5%）← agencyRate の内数
+// - 代理店: base × (agencyRate - connectorRate)（例: 10%）← 報酬総額からコネクター分を差し引いた残り
+// - Jnavi取り分: 残余（= base - 報酬総額）
 // ※ base は案件ごとに設定される「報酬計算対象額」。今回のデモは売上ベースで計算。
 
 function floorJPY(x: number) {
@@ -22,7 +23,11 @@ export function calculateModelAAmounts(args: {
 } {
   const base = Math.max(0, args.baseAmountJPY)
 
-  const agency = floorJPY(base * args.agencyRate)
+  if (args.connectorRate > args.agencyRate) {
+    throw new Error('connectorRate は agencyRate 以下である必要があります')
+  }
+
+  const agency = floorJPY(base * (args.agencyRate - args.connectorRate))
   const connector = floorJPY(base * args.connectorRate)
   const remainder = base - (agency + connector)
 

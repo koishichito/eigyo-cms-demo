@@ -442,8 +442,9 @@ export function DbProvider(props: { children: React.ReactNode }) {
           const actor = requireSession(db)
           if (!isAdmin(actor)) return { ok: false, message: '権限がありません' }
 
-          if (!(agencyRate >= 0 && agencyRate <= 1)) return { ok: false, message: '代理店率が不正です' }
+          if (!(agencyRate >= 0 && agencyRate <= 1)) return { ok: false, message: '報酬総額率が不正です' }
           if (!(connectorRate >= 0 && connectorRate <= 1)) return { ok: false, message: 'コネクター率が不正です' }
+          if (connectorRate > agencyRate) return { ok: false, message: 'コネクター率は報酬総額率以下にしてください' }
 
           setDb((prev) => {
             let next: Db = {
@@ -696,8 +697,8 @@ export function DbProvider(props: { children: React.ReactNode }) {
                 recipientType: 'ユーザー報酬',
                 userId: agency.id,
                 userRole: '代理店',
-                label: '代理店報酬（15%）',
-                rate: ratesUsed.agencyRate,
+                label: `代理店報酬（${Math.round((ratesUsed.agencyRate - ratesUsed.connectorRate) * 1000) / 10}%）`,
+                rate: ratesUsed.agencyRate - ratesUsed.connectorRate,
                 baseAmountJPY: amounts.baseAmountJPY,
                 amountJPY: amounts.agencyRewardJPY,
                 status: initStatus,
@@ -744,7 +745,7 @@ export function DbProvider(props: { children: React.ReactNode }) {
             next = logAppend(next, {
               actorUserId: actor.id,
               action: '売上確定',
-              detail: `${deal.id} / ${product.name} / ${agency.name}に15%、${connector.name}に5%`,
+              detail: `${deal.id} / ${product.name} / ${agency.name}に${Math.round((ratesUsed.agencyRate - ratesUsed.connectorRate) * 1000) / 10}%、${connector.name}に${Math.round(ratesUsed.connectorRate * 1000) / 10}%`,
               relatedId: deal.id,
             })
 

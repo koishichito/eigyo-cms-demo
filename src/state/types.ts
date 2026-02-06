@@ -199,9 +199,9 @@ export type PayoutRequest = {
 export type SystemSettings = {
   /** 出金の最低金額 */
   minPayoutJPY: number
-  /** 代理店報酬率（固定） */
+  /** 報酬総額率（固定）— 代理店+コネクターの報酬合計率 */
   agencyRate: number
-  /** コネクター報酬率（固定） */
+  /** コネクター報酬率（agencyRate の内数） */
   connectorRate: number
 }
 

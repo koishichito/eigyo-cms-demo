@@ -62,7 +62,7 @@ function RewardsInner() {
 
   return (
     <div className="grid gap-4">
-      <Card title="報酬/出金" subtitle="固定率（代理店15%・コネクター5%）の内訳が明記されます">
+      <Card title="報酬/出金" subtitle="報酬総額15%（代理店10%・コネクター5%）の内訳が明記されます">
         <div className="grid gap-3 md:grid-cols-4">
           <SummaryBox label="未確定" value={sums.未確定} tone="amber" />
           <SummaryBox label="確定" value={sums.確定} tone="emerald" />
