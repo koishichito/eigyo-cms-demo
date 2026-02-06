@@ -60,7 +60,7 @@ export type AdSpec = {
   playbackFrequency: string
 }
 
-export type VacancyStatus = '募集中' | '売切'
+export type VacancyStatus = '募集中' | '残りわずか' | '売切'
 
 export type Product = {
   id: string

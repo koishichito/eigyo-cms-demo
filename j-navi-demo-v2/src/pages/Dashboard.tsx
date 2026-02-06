@@ -2,15 +2,8 @@ import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
 import { useDb } from '../state/DbProvider'
-import { connectorsForAgency, getCurrentUser, sumAgencyRewards, sumAgencyTeamSales, sumConnectorRewards, sumConnectorSales } from '../state/selectors'
+import { connectorsForAgency, getCurrentUser, sumAgencyRewards, sumAgencyTeamSales, sumConnectorRewards, sumConnectorSales, sumUserRewards } from '../state/selectors'
 import { formatJPY } from '../utils/format'
-
-function sumMyAllocations(db: any, userId: string, status?: string) {
-  return db.transactions
-    .flatMap((t: any) => t.allocations)
-    .filter((a: any) => a.recipientType === 'ユーザー報酬' && a.userId === userId && (status ? a.status === status : true))
-    .reduce((sum: number, a: any) => sum + a.amountJPY, 0)
-}
 
 export default function DashboardPage() {
   const { db } = useDb()
@@ -24,17 +17,17 @@ export default function DashboardPage() {
     )
   }
 
-  const myPending = sumMyAllocations(db, me.id, '未確定')
-  const myConfirmed = sumMyAllocations(db, me.id, '確定')
-  const myPaid = sumMyAllocations(db, me.id, '支払済み')
+  const myPending = sumUserRewards(db, me.id, '未確定')
+  const myConfirmed = sumUserRewards(db, me.id, '確定')
+  const myPaid = sumUserRewards(db, me.id, '支払済み')
 
   const openDeals =
     me.role === 'コネクター'
-      ? db.deals.filter((d: any) => d.connectorId === me.id && !d.locked && d.status !== '失注').length
-      : db.deals.filter((d: any) => {
+      ? db.deals.filter((d) => d.connectorId === me.id && !d.locked && d.status !== '失注').length
+      : db.deals.filter((d) => {
           if (d.locked) return false
           if (d.status === '失注') return false
-          const c = db.users.find((u: any) => u.id === d.connectorId)
+          const c = db.users.find((u) => u.id === d.connectorId)
           return c?.connector?.agencyId === me.id
         }).length
 

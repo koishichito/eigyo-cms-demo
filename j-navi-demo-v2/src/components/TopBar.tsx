@@ -5,19 +5,20 @@ import { getCurrentUser } from '../state/selectors'
 import { Badge } from './Badge'
 
 const TITLES: { prefix: string; title: string }[] = [
-  { prefix: '/dashboard', title: 'ホーム' },
-  { prefix: '/marketplace', title: 'カタログ' },
-  { prefix: '/deals', title: '商談管理' },
-  { prefix: '/network', title: '組織/チーム' },
-  { prefix: '/rewards', title: '報酬/出金' },
-  { prefix: '/settings', title: '設定' },
-  { prefix: '/admin', title: '統合ダッシュボード' },
+  // Longer prefixes must come first for correct startsWith matching
   { prefix: '/admin/partners', title: '組織/ユーザー' },
   { prefix: '/admin/products', title: '商品マスタ' },
   { prefix: '/admin/deals', title: '商談/取引（運営）' },
   { prefix: '/admin/payouts', title: '出金申請（運営）' },
   { prefix: '/admin/ranks', title: '報酬設定（運営）' },
   { prefix: '/admin/logs', title: '監査ログ（運営）' },
+  { prefix: '/admin', title: '統合ダッシュボード' },
+  { prefix: '/dashboard', title: 'ホーム' },
+  { prefix: '/marketplace', title: 'カタログ' },
+  { prefix: '/deals', title: '商談管理' },
+  { prefix: '/network', title: '組織/チーム' },
+  { prefix: '/rewards', title: '報酬/出金' },
+  { prefix: '/settings', title: '設定' },
 ]
 
 function titleFor(pathname: string): string {
