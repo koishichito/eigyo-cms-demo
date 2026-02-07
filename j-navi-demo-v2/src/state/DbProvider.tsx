@@ -864,7 +864,7 @@ export function DbProvider(props: { children: React.ReactNode }) {
 
           setDb((prev) => {
             const payoutRequests = prev.payoutRequests.map((p) =>
-              p.id === payoutRequestId ? { ...p, status: '支払済み', processedAt: nowIso() } : p,
+              p.id === payoutRequestId ? { ...p, status: '支払済み' as const, processedAt: nowIso() } : p,
             )
 
             const transactions = prev.transactions.map((t) =>

@@ -13,6 +13,7 @@ type ToastItem = {
 
 type ToastApi = {
   push: (message: string, tone?: ToastTone) => void
+  show: (message: string, tone?: ToastTone) => void
   success: (message: string) => void
   info: (message: string) => void
   error: (message: string) => void
@@ -47,6 +48,7 @@ export function ToastProvider(props: { children: ReactNode }) {
   const api = useMemo<ToastApi>(
     () => ({
       push,
+      show: push,
       success: (m) => push(m, 'success'),
       info: (m) => push(m, 'info'),
       error: (m) => push(m, 'error'),

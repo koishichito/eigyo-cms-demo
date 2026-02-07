@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
 import type { ReactNode } from 'react'
 
-export function Card(props: { children: ReactNode; className?: string }) {
+export function Card(props: { children: ReactNode; className?: string; title?: string; subtitle?: string }) {
   return (
     <div
       className={clsx(
@@ -9,7 +9,15 @@ export function Card(props: { children: ReactNode; className?: string }) {
         props.className,
       )}
     >
-      {props.children}
+      {props.title ? (
+        <div className="border-b border-slate-100 px-5 py-4">
+          <div className="text-sm font-semibold text-slate-900">{props.title}</div>
+          {props.subtitle ? (
+            <div className="mt-1 text-xs text-slate-500">{props.subtitle}</div>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="px-5 py-4">{props.children}</div>
     </div>
   )
 }

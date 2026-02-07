@@ -236,7 +236,8 @@ function AdminProductsInner() {
                     return
                   }
 
-                  const res = actions.updateProduct({ ...editing })
+                  const { id: _id, supplierId: _sid, ...patch } = editing
+                  const res = actions.updateProduct(editing.id, patch)
                   if (!res.ok) toast.show(res.message ?? '更新できませんでした', 'error')
                   else {
                     toast.show('更新しました', 'success')

@@ -53,7 +53,7 @@ function AdminDealsInner() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="text-slate-900">{d.customerCompanyName}</div>
-                      <div className="text-xs text-slate-500">{d.contactName}</div>
+                      <div className="text-xs text-slate-500">{d.customerName}</div>
                     </td>
                     <td className="px-3 py-2">
                       <Badge tone="amber">{d.status}</Badge>
@@ -98,15 +98,12 @@ function AdminDealsInner() {
                 const agency = findUser(db, t.agencyId)
                 const connector = findUser(db, t.connectorId)
 
-                const agencyAlloc = t.allocations.find(
-                  (a) => a.recipientType === 'ユーザー報酬' && a.userRole === '代理店'
-                )
-                const connectorAlloc = t.allocations.find(
-                  (a) => a.recipientType === 'ユーザー報酬' && a.userRole === 'コネクター'
-                )
+                const userAllocs = t.allocations.filter((a): a is import('../../state/types').UserRewardAllocation => a.recipientType === 'ユーザー報酬')
+                const agencyAlloc = userAllocs.find((a) => a.userRole === '代理店')
+                const connectorAlloc = userAllocs.find((a) => a.userRole === 'コネクター')
                 const jnavi = t.allocations.find((a) => a.recipientType === 'Jnavi取り分')
 
-                const hasPending = t.allocations.some((a) => a.recipientType === 'ユーザー報酬' && a.status === '未確定')
+                const hasPending = t.allocations.some((a) => a.recipientType === 'ユーザー報酬' && 'status' in a && a.status === '未確定')
 
                 return (
                   <tr key={t.id} className="border-t border-slate-100">

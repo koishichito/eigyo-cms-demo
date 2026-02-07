@@ -2,21 +2,26 @@ import { clsx } from 'clsx'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'ghost'
+type Size = 'sm' | 'md'
 
 export function Button(
   props: ButtonHTMLAttributes<HTMLButtonElement> & {
     variant?: Variant
+    size?: Size
     leftIcon?: ReactNode
   },
 ) {
   const variant = props.variant ?? 'primary'
-  const { className, leftIcon, ...rest } = props
+  const size = props.size ?? 'md'
+  const { className, leftIcon, size: _size, ...rest } = props
 
   return (
     <button
       {...rest}
       className={clsx(
-        'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+        size === 'sm' && 'px-2 py-1 text-xs',
+        size === 'md' && 'px-3 py-2 text-sm',
         variant === 'primary' &&
           'bg-[var(--jnavi-navy)] text-white hover:brightness-110',
         variant === 'secondary' &&

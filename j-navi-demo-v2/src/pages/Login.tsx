@@ -60,7 +60,8 @@ function LoginInner() {
                 toast.show(res.message ?? 'ログインに失敗しました', 'error')
                 return
               }
-              navigate('/')
+              const user = db.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())
+              navigate(user ? getRoleHomePath(user) : '/dashboard')
             }}
           >
             ログイン
