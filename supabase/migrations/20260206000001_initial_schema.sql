@@ -490,9 +490,9 @@ BEGIN
 
   SELECT * INTO v_settings FROM public.system_settings WHERE id = 1;
 
-  -- 報酬計算
+  -- 報酬計算（総額内分割方式: agency_rate は報酬総額率、代理店取り分 = agency_rate - connector_rate）
   v_base := p_final_sale_amount_jpy;
-  v_agency_reward := FLOOR(v_base * v_settings.agency_rate);
+  v_agency_reward := FLOOR(v_base * (v_settings.agency_rate - v_settings.connector_rate));
   v_connector_reward := FLOOR(v_base * v_settings.connector_rate);
   v_jnavi_share := GREATEST(0, v_base - v_agency_reward - v_connector_reward);
 
@@ -533,8 +533,8 @@ BEGIN
   INSERT INTO public.allocations (transaction_id, recipient_type, user_id, user_role, label, rate, base_amount_jpy, amount_jpy, status)
   VALUES
     (v_tx_id, 'ユーザー報酬', v_agency.id, '代理店',
-     '代理店報酬（' || ROUND(v_settings.agency_rate * 100) || '%）',
-     v_settings.agency_rate, v_base, v_agency_reward, v_init_status),
+     '代理店報酬（' || ROUND((v_settings.agency_rate - v_settings.connector_rate) * 100) || '%）',
+     v_settings.agency_rate - v_settings.connector_rate, v_base, v_agency_reward, v_init_status),
     (v_tx_id, 'ユーザー報酬', v_connector.id, 'コネクター',
      'コネクター報酬（' || ROUND(v_settings.connector_rate * 100) || '%）',
      v_settings.connector_rate, v_base, v_connector_reward, v_init_status),
@@ -555,7 +555,7 @@ BEGIN
   VALUES (
     COALESCE(v_actor_id::TEXT, 'SYSTEM'),
     '売上確定',
-    v_deal.id::TEXT || ' / ' || v_product.name || ' / ' || v_agency.name || 'に' || ROUND(v_settings.agency_rate * 100) || '%、' || v_connector.name || 'に' || ROUND(v_settings.connector_rate * 100) || '%',
+    v_deal.id::TEXT || ' / ' || v_product.name || ' / ' || v_agency.name || 'に' || ROUND((v_settings.agency_rate - v_settings.connector_rate) * 100) || '%、' || v_connector.name || 'に' || ROUND(v_settings.connector_rate * 100) || '%',
     v_deal.id::TEXT
   );
 

@@ -495,8 +495,9 @@ export function DbProvider(props: { children: React.ReactNode }) {
       },
 
       async adminSetCommissionRates(agencyRate, connectorRate) {
-        if (!(agencyRate >= 0 && agencyRate <= 1)) return { ok: false, message: '代理店率が不正です' }
+        if (!(agencyRate >= 0 && agencyRate <= 1)) return { ok: false, message: '報酬総額率が不正です' }
         if (!(connectorRate >= 0 && connectorRate <= 1)) return { ok: false, message: 'コネクター率が不正です' }
+        if (connectorRate > agencyRate) return { ok: false, message: 'コネクター率は報酬総額率以下にしてください' }
 
         const { error } = await supabase
           .from('system_settings')

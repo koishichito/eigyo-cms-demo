@@ -360,11 +360,11 @@ function FinalizeForm(props: { deal: Deal; product: Product; onClose: () => void
               <span className="font-semibold">{formatJPY(amounts.baseAmountJPY)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">代理店報酬（15%）</span>
+              <span className="text-slate-600">代理店報酬（{Math.round((db.settings.agencyRate - db.settings.connectorRate) * 1000) / 10}%）</span>
               <span className="font-semibold">{formatJPY(amounts.agencyRewardJPY)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">コネクター報酬（5%）</span>
+              <span className="text-slate-600">コネクター報酬（{Math.round(db.settings.connectorRate * 1000) / 10}%）</span>
               <span className="font-semibold">{formatJPY(amounts.connectorRewardJPY)}</span>
             </div>
           </div>

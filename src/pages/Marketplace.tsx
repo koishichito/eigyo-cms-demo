@@ -184,7 +184,7 @@ function CommissionPreview(props: { baseDefault: number; role: string }) {
         <div className="grid gap-1 rounded-lg border border-slate-200 bg-slate-50 p-3">
           {props.role === '代理店' ? (
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">あなたの代理店報酬（15%）</span>
+              <span className="text-slate-600">あなたの代理店報酬（{Math.round((db.settings.agencyRate - db.settings.connectorRate) * 1000) / 10}%）</span>
               <span className="font-semibold">{formatJPY(amounts.agencyRewardJPY)}</span>
             </div>
           ) : props.role === 'コネクター' ? (
@@ -195,7 +195,7 @@ function CommissionPreview(props: { baseDefault: number; role: string }) {
           ) : null}
 
           <div className="mt-2 text-xs text-slate-500">
-            ※運営側では「代理店: base×15%」「コネクター: base×5%」の内訳を監査ログに残します。
+            ※運営側では「代理店: base×{Math.round((db.settings.agencyRate - db.settings.connectorRate) * 1000) / 10}%」「コネクター: base×{Math.round(db.settings.connectorRate * 1000) / 10}%」の内訳を監査ログに残します。
           </div>
         </div>
       </div>

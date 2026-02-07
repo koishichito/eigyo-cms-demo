@@ -128,7 +128,7 @@ function AgencyBox(props: { agencyId: string; title: string }) {
               <span className="font-semibold">{formatJPY(sumAgencyTeamSales(db, agency.id))}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">代理店報酬合計（15%）</span>
+              <span className="text-slate-600">代理店報酬合計（10%）</span>
               <span className="font-semibold">{formatJPY(sumAgencyRewards(db, agency.id))}</span>
             </div>
           </div>

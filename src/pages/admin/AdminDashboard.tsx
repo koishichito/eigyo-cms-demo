@@ -84,7 +84,7 @@ export default function AdminDashboardPage() {
             <div className="mt-1 text-xl font-semibold text-slate-900">{formatJPY(totals.totalSales)}</div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-xs text-slate-500">代理店報酬 合計（15%）</div>
+            <div className="text-xs text-slate-500">代理店報酬 合計（10%）</div>
             <div className="mt-1 text-xl font-semibold text-slate-900">{formatJPY(totals.totalAgency)}</div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -123,7 +123,7 @@ export default function AdminDashboardPage() {
               <tr>
                 <th className="px-3 py-2">商材</th>
                 <th className="px-3 py-2">売上</th>
-                <th className="px-3 py-2">代理店15%</th>
+                <th className="px-3 py-2">代理店10%</th>
                 <th className="px-3 py-2">コネクター5%</th>
                 <th className="px-3 py-2">Jnavi取り分</th>
               </tr>

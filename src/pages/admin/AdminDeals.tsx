@@ -78,7 +78,7 @@ function AdminDealsInner() {
 
       <Card
         title="売上確定/取引（配分内訳）"
-        subtitle="『代理店15%』『コネクター5%』の内訳を明記します。監査ログも残ります。"
+        subtitle="報酬総額15%（代理店10%＋コネクター5%）の内訳を明記します。監査ログも残ります。"
       >
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="min-w-full text-sm">
@@ -87,7 +87,7 @@ function AdminDealsInner() {
                 <th className="px-3 py-2">取引ID</th>
                 <th className="px-3 py-2">案件</th>
                 <th className="px-3 py-2">報酬計算対象額</th>
-                <th className="px-3 py-2">代理店15%</th>
+                <th className="px-3 py-2">代理店10%</th>
                 <th className="px-3 py-2">コネクター5%</th>
                 <th className="px-3 py-2">Jnavi取り分</th>
                 <th className="px-3 py-2">状態</th>
@@ -124,7 +124,7 @@ function AdminDealsInner() {
                     <td className="px-3 py-2">{formatJPY(t.baseAmountJPY)}</td>
                     <td className="px-3 py-2">
                       <div>{formatJPY(t.agencyRewardJPY)}</div>
-                      <div className="text-xs text-slate-500">(15%)</div>
+                      <div className="text-xs text-slate-500">(10%)</div>
                     </td>
                     <td className="px-3 py-2">
                       <div>{formatJPY(t.connectorRewardJPY)}</div>
@@ -176,7 +176,7 @@ function AdminDealsInner() {
           <div className="font-semibold">監査ポイント</div>
           <ul className="mt-2 list-disc pl-5 text-sm text-slate-600">
             <li>
-              各案件（dealId）に対し「代理店15%」「コネクター5%」の配分がテーブル上に明記されます。
+              各案件（dealId）に対し「代理店10%」「コネクター5%」（報酬総額15%の内訳）がテーブル上に明記されます。
             </li>
             <li>同内容のログは「監査ログ」画面にも残ります。</li>
           </ul>
