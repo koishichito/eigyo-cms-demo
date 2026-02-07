@@ -4,3 +4,6 @@ dist
 .vercel
 .env
 .env.*
+
+# Deploy state (runtime, not version controlled)
+.deploy-state
