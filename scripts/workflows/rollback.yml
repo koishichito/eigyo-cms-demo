@@ -1,0 +1,41 @@
+# =============================================================
+# Manual rollback workflow
+#
+# To activate: copy this file to .github/workflows/rollback.yml
+# Requires a token with 'workflows' permission to push.
+# =============================================================
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'rollback' to confirm"
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    if: inputs.confirm == 'rollback'
+    runs-on: ubuntu-latest
+    # Uncomment for actual deployment:
+    # runs-on: self-hosted
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rollback summary
+        run: |
+          echo "## Rollback Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### To rollback on the server:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "./scripts/rollback.sh" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      # Uncomment for automated rollback on self-hosted runner:
+      # - name: Execute rollback
+      #   run: ./scripts/rollback.sh

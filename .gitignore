@@ -7,3 +7,6 @@ releases
 .env.local
 .env.*.local
 snapshots/
+
+# Deploy state (runtime, not version controlled)
+.deploy-state
